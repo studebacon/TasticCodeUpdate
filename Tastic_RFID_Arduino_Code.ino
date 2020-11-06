@@ -1,4 +1,9 @@
-/* 10/14/2020 - Modified original code to use modern SD library and current Arduino IDE. 
+/* 
+ *  11/3/2020 - Modified code.  Removed Serial LCD functionality.  
+ *  Reuse 3 pin serial terminal output to trigger transistor circuit for vibration motor for haptic feedback.
+ *  
+ *  
+ *  10/14/2020 - Modified original code to use modern SD library and current Arduino IDE. 
  *  This will allow the use of microSD cards greater than 2GB.
  *  Serial LCD functionality has not been tested with this version.
  * 
@@ -57,14 +62,13 @@
 */
 
 
-#include <SoftwareSerial.h>
-#include <SPI.h>
+/*#include <SoftwareSerial.h>
+#include <SPI.h>*/
 #include <SD.h>
 
 #define MAX_BITS 100                 // max number of bits 
 #define WEIGAND_WAIT_TIME  3000      // time to wait for another weigand pulse.  
-#define txPin 4 // White wire from Serial LCD screen
-const int LCDdelay = 10;  // conservative, 2 actually works
+#define txPin 4 // Input lead on haptic feedback module
 
 
 unsigned char databits[MAX_BITS];    // stores all of the data bits
@@ -131,64 +135,6 @@ void ISR_INT1()
 }
 
 ///////////////////////////////////////////////////////
-// LCD setup - 20x4
-SoftwareSerial LCD(0, txPin);
-
-void lcdPosition(int row, int col) {
-  LCD.write(0xFE);   //command flag
-  LCD.write((col + row*64 + 128));    //position 
-  delay(LCDdelay);
-}
-
-
-void lcdPositionLine2() {
-  LCD.write(0xFE);   //command flag
-  LCD.write(0x45);
-  LCD.write(0x40);
-  delay(LCDdelay);
-}
-
-void lcdPositionLine3() {
-  LCD.write(0xFE);   //command flag
-  LCD.write(0x45);
-  LCD.write(0x14);
-  delay(LCDdelay);
-}
-
-void lcdPositionLine4() {
-  LCD.write(0xFE);   //command flag
-  LCD.write(0x45);
-  LCD.write(0x54);
-  delay(LCDdelay);
-}
-
-void clearLCD(){
-  LCD.write(0xFE);   //command flag
-  LCD.write(0x51);   //clear command.
-  delay(LCDdelay);
-}
-
-void serCommand(){   //a general function to call the command flag for issuing all other commands   
-  LCD.write(0xFE);
-}
-
-void setLCDContrast() {
-  LCD.write(0xFE);   //command flag
-  LCD.write(0x52);
-  LCD.write(40);	//value 1 to 50 (50 is highest contrast)
-  delay(LCDdelay);
-}
-
-
-void setLCDBrightness() {
-  LCD.write(0xFE);   //command flag
-  LCD.write(0x53);
-  LCD.write(5);  //value 1 to 8
-  delay(LCDdelay);
-}
-
-
-///////////////////////////////////////////////////////
 // SETUP function
 void setup()
 {
@@ -200,32 +146,12 @@ void setup()
   Serial.println("RFID Readers");
   
   pinMode(txPin, OUTPUT);
-  LCD.begin(9600);
-  
-  setLCDContrast();
-  setLCDBrightness();
-  
-  // Setup output pin to SD card
-  //pinMode(chipSelect, OUTPUT);
   
   // Initialize SD card
   while(!SD.begin(chipSelect)) {
     Serial.println("No SD Card!");
-    clearLCD();
-    LCD.print("No SD Card!");  
   }
-  // Commented out with no LCD
-  if(!SD.begin(chipSelect)) {
-    clearLCD();
-    LCD.print("Problem with SD card");
-  }
-  else {
-    clearLCD();
-    Serial.println("SD card initialized.");
-    LCD.print("SD card initialized.");
-  }
- 
-  
+   
   // binds the ISR functions to the falling edge of INTO and INT1
   attachInterrupt(0, ISR_INT0, FALLING);  
   attachInterrupt(1, ISR_INT1, FALLING);
@@ -255,6 +181,7 @@ void loop()
        
     printBits();
     writeSD();
+    vibrate();
 
      // cleanup and get ready for the next card
      bitCount = 0; facilityCode = 0; cardCode = 0;
@@ -282,25 +209,22 @@ void printBits()
       Serial.print(", 44bit HEX = ");
       Serial.print(cardChunk1, HEX);
       Serial.println(cardChunk2, HEX);
-      
-      clearLCD();
-      LCD.print(bitCount);
-      LCD.print(" bit card.");
-      lcdPositionLine2();
-      LCD.print("Facility = ");
-      LCD.print(facilityCode);
-      lcdPositionLine3();
-      LCD.print("Card = ");
-      LCD.print(cardCode);
-      lcdPositionLine4();
-      LCD.print("44bitHEX= ");
-      LCD.print(cardChunk1, HEX);
-      LCD.print(cardChunk2, HEX);
-      
-      delay(2500);
-      clearLCD();
 }
 
+///////////////////////////////////////////////////////
+// Vibrate function
+void vibrate()
+{
+      //uses pin 4 for haptic feedback module (vibration motor)
+      digitalWrite(txPin, HIGH);
+      delay(500);
+      digitalWrite(txPin, LOW);
+      delay(250);
+      digitalWrite(txPin, HIGH);
+      delay(500);
+      digitalWrite(txPin, LOW);
+      delay(250);
+}
 
 ///////////////////////////////////////////////////////
 // SETUP function
@@ -675,8 +599,7 @@ void writeSD() {
     Serial.println("Wrote data to SD card");
   } 
   else {
-    clearLCD();
-    LCD.print("Error writing to file");
+    Serial.println("Error writing to file");
   }
 }
 
